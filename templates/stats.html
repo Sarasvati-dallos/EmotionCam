@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Estadísticas – EmotionCam</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root { --bg:#0d0d1a; --card:#13132a; --accent:#22d3ee; --text:#e2e8f0; --muted:#64748b; --green:#34d399; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',sans-serif; min-height:100vh; }
+  nav { display:flex; justify-content:space-around; background:#0a0a16;
+        padding:12px 0; position:sticky; top:0; z-index:10; border-bottom:1px solid #1e1e3a; }
+  nav a { color:var(--muted); text-decoration:none; font-size:13px;
+          display:flex; flex-direction:column; align-items:center; gap:2px; }
+  nav a span.ico { font-size:22px; }
+  nav a.active { color:var(--accent); }
+  .page { padding:16px; }
+  h2 { font-size:22px; color:var(--accent); margin-bottom:16px; font-weight:700; }
+  .top-card { background:#0e2030; border:1px solid #164e63; border-radius:16px;
+              padding:18px; display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+  .top-emoji { font-size:48px; }
+  .top-label { font-size:12px; color:var(--muted); }
+  .top-name  { font-size:24px; font-weight:700; color:var(--accent); }
+  .bar-row   { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .bar-emoji { font-size:22px; width:32px; text-align:center; }
+  .bar-name  { width:76px; font-size:13px; color:var(--text); }
+  .bar-bg    { flex:1; background:#1e2240; border-radius:6px; height:18px; overflow:hidden; }
+  .bar-fill  { height:100%; border-radius:6px; transition:width 1s ease; }
+  .bar-pct   { width:40px; font-size:12px; color:var(--muted); text-align:right; }
+  .empty     { text-align:center; color:var(--muted); padding:60px 20px; font-size:16px; }
+  .bar-angry    { background:#f87171; }
+  .bar-disgust  { background:#86efac; }
+  .bar-fear     { background:#c084fc; }
+  .bar-happy    { background:#fde047; }
+  .bar-neutral  { background:#7dd3fc; }
+  .bar-sad      { background:#60a5fa; }
+  .bar-surprise { background:#fb923c; }
+</style>
+</head>
+<body>
+<nav>
+  <a href="/"><span class="ico">🏠</span>Inicio</a>
+  <a href="/"><span class="ico">📷</span>Cámara</a>
+  <a href="/history"><span class="ico">📋</span>Historial</a>
+  <a href="/stats" class="active"><span class="ico">📊</span>Stats</a>
+</nav>
+
+<div class="page">
+  <h2>📊 Estadísticas</h2>
+
+  {% if top and top.count > 0 %}
+  <div class="top-card">
+    <div class="top-emoji">{{ top.emoji }}</div>
+    <div>
+      <div class="top-label">Emoción más detectada</div>
+      <div class="top-name">{{ top.emotion }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if data %}
+    {% for d in data %}
+    <div class="bar-row">
+      <span class="bar-emoji">{{ d.emoji }}</span>
+      <span class="bar-name">{{ d.emotion }}</span>
+      <div class="bar-bg">
+        <div class="bar-fill bar-{{ d.emotion|lower }}"
+             style="width:{{ d.pct }}%"></div>
+      </div>
+      <span class="bar-pct">{{ d.pct }}%</span>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">😴 Sin datos aún.<br><br>Abre la cámara para empezar.</div>
+  {% endif %}
+</div>
+</body>
+</html>

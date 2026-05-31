@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>EmotionCam</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0d1a; --card: #13132a; --accent: #22d3ee;
+    --green: #34d399; --text: #e2e8f0; --muted: #64748b;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  /* NAV */
+  nav { display:flex; justify-content:space-around; background:#0a0a16;
+        padding:12px 0; position:sticky; top:0; z-index:10;
+        border-bottom:1px solid #1e1e3a; }
+  nav a { color:var(--muted); text-decoration:none; font-size:13px;
+          display:flex; flex-direction:column; align-items:center; gap:2px; }
+  nav a span.ico { font-size:22px; }
+  nav a.active { color:var(--accent); }
+
+  /* HOME */
+  #page-home { display:flex; flex-direction:column; align-items:center;
+               justify-content:center; padding:40px 24px; gap:20px; min-height:85vh; }
+  .logo-emoji { font-size:80px; }
+  h1 { font-size:32px; color:var(--accent); font-weight:700; }
+  .subtitle { color:var(--muted); font-size:15px; text-align:center; }
+  .btn-primary { background:var(--accent); color:#0d0d1a; border:none;
+                 padding:16px 48px; border-radius:14px; font-size:18px;
+                 font-weight:700; cursor:pointer; width:100%; max-width:320px;
+                 transition:opacity .2s; }
+  .btn-primary:active { opacity:.8; }
+  .btn-secondary { background:#1e2240; color:var(--text); border:none;
+                   padding:14px 48px; border-radius:14px; font-size:16px;
+                   cursor:pointer; width:100%; max-width:320px; transition:opacity .2s; }
+  .btn-secondary:active { opacity:.7; }
+
+  /* CAMERA */
+  #page-camera { display:none; flex-direction:column; }
+  .cam-header { display:flex; align-items:center; justify-content:space-between;
+                padding:10px 14px; background:#0a0a16; }
+  .cam-header h2 { font-size:16px; color:var(--accent); }
+  #fps-label { font-size:12px; color:var(--green); }
+  #video-stream { width:100%; display:block; background:#000; }
+  .emotion-panel { background:var(--card); padding:14px 18px; }
+  .emotion-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  #emoji-display { font-size:40px; }
+  .emotion-info { flex:1; }
+  #emotion-name { font-size:22px; font-weight:700; color:var(--accent); }
+  #conf-pct { font-size:14px; color:var(--muted); margin-top:2px; }
+  .bar-bg { background:#1e2240; border-radius:8px; height:10px; overflow:hidden; }
+  .bar-fill { height:100%; background:var(--green); border-radius:8px;
+              transition:width .4s ease; width:0%; }
+  .cam-footer { padding:12px 14px; display:flex; gap:10px; background:#0a0a16; }
+  .btn-stop { background:#ef4444; color:#fff; border:none; padding:12px;
+              border-radius:12px; font-size:15px; font-weight:600;
+              cursor:pointer; flex:1; }
+  .btn-snapshot { background:#f59e0b; color:#0d0d1a; border:none; padding:12px;
+                  border-radius:12px; font-size:15px; font-weight:600;
+                  cursor:pointer; flex:1; }
+
+  /* STATUS badge */
+  .badge { display:inline-block; padding:4px 12px; border-radius:20px;
+           font-size:12px; font-weight:600; }
+  .badge.on  { background:#065f46; color:var(--green); }
+  .badge.off { background:#1e2240; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="active" onclick="showPage('home')" id="nav-home">
+    <span class="ico">🏠</span>Inicio
+  </a>
+  <a href="#" onclick="showPage('camera')" id="nav-camera">
+    <span class="ico">📷</span>Cámara
+  </a>
+  <a href="/history" id="nav-history">
+    <span class="ico">📋</span>Historial
+  </a>
+  <a href="/stats" id="nav-stats">
+    <span class="ico">📊</span>Stats
+  </a>
+</nav>
+
+<!-- HOME -->
+<div id="page-home">
+  <div class="logo-emoji">😊</div>
+  <h1>EmotionCam</h1>
+  <p class="subtitle">Detector de emociones faciales<br>en tiempo real con IA</p>
+  <button class="btn-primary" onclick="startCamera()">📷 Iniciar cámara</button>
+  <a href="/history" style="width:100%;max-width:320px;">
+    <button class="btn-secondary" style="width:100%;">📋 Ver historial</button>
+  </a>
+  <a href="/stats" style="width:100%;max-width:320px;">
+    <button class="btn-secondary" style="width:100%;">📊 Estadísticas</button>
+  </a>
+</div>
+
+<!-- CAMERA -->
+<div id="page-camera">
+  <div class="cam-header">
+    <h2>📷 Cámara en vivo</h2>
+    <span id="fps-label">conectando...</span>
+    <span id="status-badge" class="badge off">● inactivo</span>
+  </div>
+
+  <img id="video-stream" src="" alt="Cámara">
+
+  <div class="emotion-panel">
+    <div class="emotion-row">
+      <span id="emoji-display">😐</span>
+      <div class="emotion-info">
+        <div id="emotion-name">—</div>
+        <div id="conf-pct">Confianza: 0%</div>
+      </div>
+    </div>
+    <div class="bar-bg"><div class="bar-fill" id="conf-bar"></div></div>
+  </div>
+
+  <div class="cam-footer">
+    <button class="btn-stop" onclick="stopCamera()">⏹ Detener</button>
+    <button class="btn-snapshot" onclick="takeSnapshot()">📸 Snapshot</button>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let cameraActive = false;
+
+  socket.on('emotion_update', data => {
+    document.getElementById('emoji-display').textContent  = data.emoji;
+    document.getElementById('emotion-name').textContent   = data.emotion;
+    document.getElementById('conf-pct').textContent       = `Confianza: ${data.conf}%`;
+    document.getElementById('conf-bar').style.width       = `${data.conf}%`;
+  });
+
+  function showPage(page) {
+    document.getElementById('page-home').style.display   = page==='home'   ? 'flex' : 'none';
+    document.getElementById('page-camera').style.display = page==='camera' ? 'flex' : 'none';
+    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+    document.getElementById('nav-'+page)?.classList.add('active');
+  }
+
+  async function startCamera() {
+    showPage('camera');
+    await fetch('/api/start', {method:'POST'});
+    document.getElementById('video-stream').src = '/video_feed';
+    document.getElementById('status-badge').className = 'badge on';
+    document.getElementById('status-badge').textContent = '● activo';
+    cameraActive = true;
+  }
+
+  async function stopCamera() {
+    await fetch('/api/stop', {method:'POST'});
+    document.getElementById('video-stream').src = '';
+    document.getElementById('status-badge').className = 'badge off';
+    document.getElementById('status-badge').textContent = '● inactivo';
+    cameraActive = false;
+    showPage('home');
+  }
+
+  function takeSnapshot() {
+    const img = document.getElementById('video-stream');
+    const canvas = document.createElement('canvas');
+    canvas.width  = img.naturalWidth  || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const link = document.createElement('a');
+    link.download = `snapshot_${Date.now()}.jpg`;
+    link.href = canvas.toDataURL('image/jpeg');
+    link.click();
+  }
+</script>
+</body>
+</html>
