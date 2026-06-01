@@ -6,7 +6,7 @@ Yeison Betancur · Sara Dallos — Proyecto IA
 
 ## ¿Cómo funciona?
 La app corre en tu PC y te conectas desde el teléfono Android por WiFi.
-El teléfono actúa como pantalla, la PC procesa la cámara y el modelo de IA.
+El teléfono abre la web con cámara desde el navegador, y la PC procesa los frames y el modelo de IA.
 
 ---
 
@@ -38,10 +38,20 @@ python app.py
 1. Conecta el teléfono al **mismo WiFi** que la PC
 2. La terminal mostrará algo como:
    ```
-   Teléfono: http://192.168.1.X:5000
+    Teléfono: https://192.168.1.X:5000
    ```
-3. Abre esa dirección en el navegador del teléfono
-4. ¡Listo!
+3. Descarga la CA desde `http://192.168.1.X:5001/emotioncam-ca.crt`
+4. Instala ese certificado raíz como CA en Android
+5. Abre la dirección `https://...` en el navegador del teléfono
+6. ¡Listo!
+
+## Instalar la CA en Android
+En la mayoría de teléfonos Android está en:
+- Ajustes
+- Seguridad
+- Cifrado y credenciales
+- Instalar un certificado
+- Certificado CA
 
 ---
 

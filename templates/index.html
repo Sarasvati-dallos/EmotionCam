@@ -2,178 +2,664 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon-192.svg" type="image/svg+xml">
 <title>EmotionCam</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #0d0d1a; --card: #13132a; --accent: #22d3ee;
-    --green: #34d399; --text: #e2e8f0; --muted: #64748b;
+    --bg: #07111f;
+    --bg-2: #0b1b31;
+    --card: rgba(10, 20, 38, 0.82);
+    --card-strong: #0f213d;
+    --line: rgba(148, 163, 184, 0.18);
+    --accent: #4dd6ff;
+    --accent-2: #8b5cf6;
+    --good: #34d399;
+    --warn: #f59e0b;
+    --bad: #f87171;
+    --text: #e5eefb;
+    --muted: #8ea2c3;
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
   }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
 
-  /* NAV */
-  nav { display:flex; justify-content:space-around; background:#0a0a16;
-        padding:12px 0; position:sticky; top:0; z-index:10;
-        border-bottom:1px solid #1e1e3a; }
-  nav a { color:var(--muted); text-decoration:none; font-size:13px;
-          display:flex; flex-direction:column; align-items:center; gap:2px; }
-  nav a span.ico { font-size:22px; }
-  nav a.active { color:var(--accent); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    color: var(--text);
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(77, 214, 255, 0.18), transparent 35%),
+      radial-gradient(circle at top right, rgba(139, 92, 246, 0.17), transparent 28%),
+      linear-gradient(180deg, var(--bg), var(--bg-2));
+  }
 
-  /* HOME */
-  #page-home { display:flex; flex-direction:column; align-items:center;
-               justify-content:center; padding:40px 24px; gap:20px; min-height:85vh; }
-  .logo-emoji { font-size:80px; }
-  h1 { font-size:32px; color:var(--accent); font-weight:700; }
-  .subtitle { color:var(--muted); font-size:15px; text-align:center; }
-  .btn-primary { background:var(--accent); color:#0d0d1a; border:none;
-                 padding:16px 48px; border-radius:14px; font-size:18px;
-                 font-weight:700; cursor:pointer; width:100%; max-width:320px;
-                 transition:opacity .2s; }
-  .btn-primary:active { opacity:.8; }
-  .btn-secondary { background:#1e2240; color:var(--text); border:none;
-                   padding:14px 48px; border-radius:14px; font-size:16px;
-                   cursor:pointer; width:100%; max-width:320px; transition:opacity .2s; }
-  .btn-secondary:active { opacity:.7; }
+  .shell {
+    min-height: 100vh;
+    padding: 18px 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
 
-  /* CAMERA */
-  #page-camera { display:none; flex-direction:column; }
-  .cam-header { display:flex; align-items:center; justify-content:space-between;
-                padding:10px 14px; background:#0a0a16; }
-  .cam-header h2 { font-size:16px; color:var(--accent); }
-  #fps-label { font-size:12px; color:var(--green); }
-  #video-stream { width:100%; display:block; background:#000; }
-  .emotion-panel { background:var(--card); padding:14px 18px; }
-  .emotion-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-  #emoji-display { font-size:40px; }
-  .emotion-info { flex:1; }
-  #emotion-name { font-size:22px; font-weight:700; color:var(--accent); }
-  #conf-pct { font-size:14px; color:var(--muted); margin-top:2px; }
-  .bar-bg { background:#1e2240; border-radius:8px; height:10px; overflow:hidden; }
-  .bar-fill { height:100%; background:var(--green); border-radius:8px;
-              transition:width .4s ease; width:0%; }
-  .cam-footer { padding:12px 14px; display:flex; gap:10px; background:#0a0a16; }
-  .btn-stop { background:#ef4444; color:#fff; border:none; padding:12px;
-              border-radius:12px; font-size:15px; font-weight:600;
-              cursor:pointer; flex:1; }
-  .btn-snapshot { background:#f59e0b; color:#0d0d1a; border:none; padding:12px;
-                  border-radius:12px; font-size:15px; font-weight:600;
-                  cursor:pointer; flex:1; }
+  .hero {
+    padding: 22px 18px 18px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(15, 28, 54, 0.84), rgba(10, 20, 38, 0.88));
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
 
-  /* STATUS badge */
-  .badge { display:inline-block; padding:4px 12px; border-radius:20px;
-           font-size:12px; font-weight:600; }
-  .badge.on  { background:#065f46; color:var(--green); }
-  .badge.off { background:#1e2240; color:var(--muted); }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -22px -30px auto;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(77, 214, 255, 0.16), transparent 68%);
+    pointer-events: none;
+  }
+
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+
+  .brand-badge {
+    width: 52px;
+    height: 52px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    font-size: 28px;
+    background: linear-gradient(135deg, rgba(77, 214, 255, 0.24), rgba(139, 92, 246, 0.28));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .eyebrow {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(30px, 7vw, 44px);
+    line-height: 1;
+  }
+
+  .subtitle {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 38rem;
+  }
+
+  .notice {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.62);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .notice strong { color: var(--text); }
+
+  .grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .panel-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .badge .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .badge.idle {
+    background: rgba(148, 163, 184, 0.12);
+    color: #b8c4d7;
+    border-color: rgba(148, 163, 184, 0.16);
+  }
+
+  .badge.active {
+    background: rgba(52, 211, 153, 0.12);
+    color: #7ef0bd;
+    border-color: rgba(52, 211, 153, 0.18);
+  }
+
+  .badge.warn {
+    background: rgba(245, 158, 11, 0.14);
+    color: #fcd38c;
+    border-color: rgba(245, 158, 11, 0.18);
+  }
+
+  .video-wrap {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    background: #020617;
+  }
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    background: #020617;
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(2, 6, 23, 0.08), rgba(2, 6, 23, 0.48)),
+      radial-gradient(circle at center, transparent 42%, rgba(2, 6, 23, 0.08) 60%, rgba(2, 6, 23, 0.42) 100%);
+  }
+
+  .overlay-grid {
+    position: absolute;
+    inset: 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  .emotion-card {
+    padding: 16px;
+  }
+
+  .emotion-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .emoji-chip {
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    font-size: 32px;
+    background: linear-gradient(135deg, rgba(77, 214, 255, 0.16), rgba(139, 92, 246, 0.18));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    flex: 0 0 auto;
+  }
+
+  .emotion-name {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.05;
+    margin: 0;
+  }
+
+  .emotion-meta {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .bar {
+    margin-top: 14px;
+    height: 12px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.14);
+    overflow: hidden;
+  }
+
+  .bar > span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--good), var(--accent));
+    transition: width 160ms ease;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 14px 16px 16px;
+  }
+
+  .button {
+    appearance: none;
+    border: 0;
+    border-radius: 16px;
+    padding: 14px 14px;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+    color: #06111f;
+    background: linear-gradient(135deg, #8be8ff, #58d7ff);
+    box-shadow: 0 12px 28px rgba(77, 214, 255, 0.22);
+  }
+
+  .button.secondary {
+    color: var(--text);
+    background: rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: none;
+  }
+
+  .button.warn {
+    color: #fff;
+    background: linear-gradient(135deg, #fb7185, #ef4444);
+    box-shadow: 0 12px 28px rgba(239, 68, 68, 0.18);
+  }
+
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .link-card {
+    padding: 14px 16px;
+    border-radius: 18px;
+    text-decoration: none;
+    color: var(--text);
+    border: 1px solid var(--line);
+    background: rgba(15, 23, 42, 0.55);
+  }
+
+  .link-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .footer-note {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 2px 8px 0;
+  }
+
+  .hidden { display: none !important; }
+
+  @media (min-width: 900px) {
+    .shell {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      align-items: start;
+    }
+
+    .hero {
+      grid-column: 1 / -1;
+    }
+
+    .grid {
+      grid-template-columns: 1.2fr 0.8fr;
+    }
+
+    .panel.camera-panel {
+      grid-row: span 2;
+    }
+
+    .actions, .links {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
 </style>
 </head>
 <body>
-
-<nav>
-  <a href="#" class="active" onclick="showPage('home')" id="nav-home">
-    <span class="ico">🏠</span>Inicio
-  </a>
-  <a href="#" onclick="showPage('camera')" id="nav-camera">
-    <span class="ico">📷</span>Cámara
-  </a>
-  <a href="/history" id="nav-history">
-    <span class="ico">📋</span>Historial
-  </a>
-  <a href="/stats" id="nav-stats">
-    <span class="ico">📊</span>Stats
-  </a>
-</nav>
-
-<!-- HOME -->
-<div id="page-home">
-  <div class="logo-emoji">😊</div>
-  <h1>EmotionCam</h1>
-  <p class="subtitle">Detector de emociones faciales<br>en tiempo real con IA</p>
-  <button class="btn-primary" onclick="startCamera()">📷 Iniciar cámara</button>
-  <a href="/history" style="width:100%;max-width:320px;">
-    <button class="btn-secondary" style="width:100%;">📋 Ver historial</button>
-  </a>
-  <a href="/stats" style="width:100%;max-width:320px;">
-    <button class="btn-secondary" style="width:100%;">📊 Estadísticas</button>
-  </a>
-</div>
-
-<!-- CAMERA -->
-<div id="page-camera">
-  <div class="cam-header">
-    <h2>📷 Cámara en vivo</h2>
-    <span id="fps-label">conectando...</span>
-    <span id="status-badge" class="badge off">● inactivo</span>
-  </div>
-
-  <img id="video-stream" src="" alt="Cámara">
-
-  <div class="emotion-panel">
-    <div class="emotion-row">
-      <span id="emoji-display">😐</span>
-      <div class="emotion-info">
-        <div id="emotion-name">—</div>
-        <div id="conf-pct">Confianza: 0%</div>
+  <main class="shell">
+    <section class="hero">
+      <div class="brand-row">
+        <div class="brand-badge">📱</div>
+        <div>
+          <p class="eyebrow">EmotionCam PWA</p>
+          <h1>La cámara vive en el teléfono.</h1>
+        </div>
       </div>
-    </div>
-    <div class="bar-bg"><div class="bar-fill" id="conf-bar"></div></div>
-  </div>
+      <p class="subtitle">
+        Abre esta web en Android, permite el acceso a la cámara y el navegador enviará frames al servidor Flask que corre en tu PC por la red Wi‑Fi local.
+      </p>
+      <div class="notice" id="secureNotice">
+        <strong>Importante:</strong> la cámara del navegador solo funciona en un contexto seguro. Si el teléfono todavía muestra aviso de certificado, descarga la CA desde <a href="/download-ca">aquí</a> e instálala una sola vez.
+      </div>
+    </section>
 
-  <div class="cam-footer">
-    <button class="btn-stop" onclick="stopCamera()">⏹ Detener</button>
-    <button class="btn-snapshot" onclick="takeSnapshot()">📸 Snapshot</button>
-  </div>
-</div>
+    <section class="panel camera-panel">
+      <div class="panel-head">
+        <p class="panel-title">Cámara del teléfono</p>
+        <div id="statusBadge" class="badge idle"><span class="dot"></span><span>Inactiva</span></div>
+      </div>
+      <div class="video-wrap">
+        <video id="cameraVideo" playsinline autoplay muted></video>
+        <div class="overlay"></div>
+        <div class="overlay-grid"></div>
+      </div>
+      <div class="emotion-card">
+        <div class="emotion-row">
+          <div class="emoji-chip" id="emojiChip">😐</div>
+          <div>
+            <div class="emotion-name" id="emotionName">—</div>
+            <div class="emotion-meta" id="emotionMeta">Listo para iniciar la cámara.</div>
+          </div>
+        </div>
+        <div class="bar" aria-label="Nivel de confianza"><span id="confidenceBar"></span></div>
+      </div>
+      <div class="actions">
+        <button class="button" id="startBtn" onclick="startCamera()">Iniciar cámara</button>
+        <button class="button secondary" id="snapshotBtn" onclick="takeSnapshot()" disabled>Snapshot</button>
+        <button class="button warn" id="stopBtn" onclick="stopCamera()" disabled>Detener</button>
+        <a class="button secondary" href="/stats" style="display:grid;place-items:center;text-decoration:none;">Ver estadísticas</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="panel">
+        <div class="panel-head">
+          <p class="panel-title">Atajos</p>
+          <div class="badge warn"><span class="dot"></span><span>Wi‑Fi local</span></div>
+        </div>
+        <div class="links" style="padding:14px 16px 16px;">
+          <a class="link-card" href="/download-ca">Instalar CA local<span>Descarga el certificado raíz para Android.</span></a>
+          <a class="link-card" href="/history">Historial de sesiones<span>Revisa las detecciones guardadas.</span></a>
+          <a class="link-card" href="/stats">Estadísticas<span>Consulta la emoción dominante.</span></a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <p class="panel-title">Estado</p>
+          <div class="badge idle" id="netBadge"><span class="dot"></span><span>Esperando permiso</span></div>
+        </div>
+        <div style="padding:14px 16px 16px; color: var(--muted); font-size: 13px; line-height: 1.5;" id="statusText">
+          Pulsa <strong>Iniciar cámara</strong> para abrir la cámara frontal y empezar a enviar frames.
+        </div>
+      </section>
+    </section>
+
+    <p class="footer-note">Si quieres instalar la PWA, usa el menú del navegador después de abrirla desde el teléfono.</p>
+  </main>
+
+  <canvas id="captureCanvas" class="hidden"></canvas>
 
 <script>
-  const socket = io();
+  const cameraVideo = document.getElementById('cameraVideo');
+  const captureCanvas = document.getElementById('captureCanvas');
+  const emojiChip = document.getElementById('emojiChip');
+  const emotionName = document.getElementById('emotionName');
+  const emotionMeta = document.getElementById('emotionMeta');
+  const confidenceBar = document.getElementById('confidenceBar');
+  const statusBadge = document.getElementById('statusBadge');
+  const netBadge = document.getElementById('netBadge');
+  const statusText = document.getElementById('statusText');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const snapshotBtn = document.getElementById('snapshotBtn');
+  const secureNotice = document.getElementById('secureNotice');
+
+  let mediaStream = null;
+  let captureTimer = null;
+  let captureInFlight = false;
   let cameraActive = false;
+  let installPromptEvent = null;
 
-  socket.on('emotion_update', data => {
-    document.getElementById('emoji-display').textContent  = data.emoji;
-    document.getElementById('emotion-name').textContent   = data.emotion;
-    document.getElementById('conf-pct').textContent       = `Confianza: ${data.conf}%`;
-    document.getElementById('conf-bar').style.width       = `${data.conf}%`;
-  });
+  function setBadge(element, kind, text) {
+    element.className = `badge ${kind}`;
+    element.innerHTML = `<span class="dot"></span><span>${text}</span>`;
+  }
 
-  function showPage(page) {
-    document.getElementById('page-home').style.display   = page==='home'   ? 'flex' : 'none';
-    document.getElementById('page-camera').style.display = page==='camera' ? 'flex' : 'none';
-    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
-    document.getElementById('nav-'+page)?.classList.add('active');
+  function setStatus(kind, text) {
+    setBadge(statusBadge, kind, text);
+  }
+
+  function setNetwork(kind, text) {
+    setBadge(netBadge, kind, text);
+  }
+
+  function updateEmotion(data) {
+    emojiChip.textContent = data.emoji || '😐';
+    emotionName.textContent = data.emotion || '—';
+    emotionMeta.textContent = `Confianza ${data.conf ?? 0}%`;
+    confidenceBar.style.width = `${Math.max(0, Math.min(100, data.conf ?? 0))}%`;
+  }
+
+  function setUiRunning(running) {
+    startBtn.disabled = running;
+    stopBtn.disabled = !running;
+    snapshotBtn.disabled = !running;
+    setStatus(running ? 'active' : 'idle', running ? 'En vivo' : 'Inactiva');
+    setNetwork(running ? 'active' : 'idle', running ? 'Capturando' : 'Esperando permiso');
+  }
+
+  function isCameraAllowed() {
+    return window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  }
+
+  async function ensureServiceWorker() {
+    if (!('serviceWorker' in navigator)) {
+      return;
+    }
+    try {
+      await navigator.serviceWorker.register('/static/sw.js');
+    } catch (error) {
+      console.warn('No se pudo registrar el service worker', error);
+    }
+  }
+
+  function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function pushFrame() {
+    if (!cameraActive || captureInFlight || !cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+      return;
+    }
+
+    captureInFlight = true;
+    const context = captureCanvas.getContext('2d', { willReadFrequently: false });
+    captureCanvas.width = cameraVideo.videoWidth;
+    captureCanvas.height = cameraVideo.videoHeight;
+    context.drawImage(cameraVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+    try {
+      const blob = await new Promise(resolve => captureCanvas.toBlob(resolve, 'image/jpeg', 0.78));
+      if (!blob) {
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('frame', blob, 'frame.jpg');
+
+      const response = await fetch('/api/frame', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = data.error === 'session_inactive'
+          ? 'La sesión se cerró en el servidor.'
+          : 'No se pudo procesar el frame.';
+        statusText.textContent = message;
+        setNetwork('warn', 'Error de envío');
+        return;
+      }
+
+      updateEmotion(data);
+      statusText.textContent = 'Frames enviados y procesados por Flask en tiempo real.';
+      setNetwork('active', 'Sincronizado');
+    } catch (error) {
+      console.warn('Error enviando frame', error);
+      statusText.textContent = 'No se pudo conectar con el servidor. Verifica que el PC y el teléfono estén en la misma red Wi‑Fi.';
+      setNetwork('warn', 'Sin conexión');
+    } finally {
+      captureInFlight = false;
+    }
   }
 
   async function startCamera() {
-    showPage('camera');
-    await fetch('/api/start', {method:'POST'});
-    document.getElementById('video-stream').src = '/video_feed';
-    document.getElementById('status-badge').className = 'badge on';
-    document.getElementById('status-badge').textContent = '● activo';
-    cameraActive = true;
+    if (!isCameraAllowed()) {
+      secureNotice.classList.remove('hidden');
+      secureNotice.innerHTML = '<strong>La cámara está bloqueada.</strong> Este navegador requiere HTTPS o localhost para usar la cámara. Abre la app por HTTPS en la red local o confía en un certificado válido.';
+      setStatus('warn', 'HTTPS requerido');
+      setNetwork('warn', 'Cámara bloqueada');
+      return;
+    }
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      cameraVideo.srcObject = mediaStream;
+      await cameraVideo.play();
+
+      const response = await fetch('/api/start', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('No se pudo iniciar la sesión');
+      }
+
+      cameraActive = true;
+      setUiRunning(true);
+      statusText.textContent = 'Cámara abierta. Enviando frames al servidor cada pocos cientos de milisegundos.';
+      await pushFrame();
+      captureTimer = window.setInterval(pushFrame, 650);
+    } catch (error) {
+      console.warn('No se pudo iniciar la cámara', error);
+      await stopCamera(true);
+      setStatus('warn', 'Permiso denegado');
+      setNetwork('warn', 'Sin cámara');
+      statusText.textContent = 'No se pudo abrir la cámara del teléfono. Revisa permisos, HTTPS y si el navegador ya usa la cámara en otra app.';
+    }
   }
 
-  async function stopCamera() {
-    await fetch('/api/stop', {method:'POST'});
-    document.getElementById('video-stream').src = '';
-    document.getElementById('status-badge').className = 'badge off';
-    document.getElementById('status-badge').textContent = '● inactivo';
+  async function stopCamera(silent = false) {
     cameraActive = false;
-    showPage('home');
+    if (captureTimer) {
+      clearInterval(captureTimer);
+      captureTimer = null;
+    }
+
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream = null;
+    }
+    cameraVideo.srcObject = null;
+
+    try {
+      await fetch('/api/stop', { method: 'POST' });
+    } catch (error) {
+      if (!silent) {
+        console.warn('Error cerrando la sesión', error);
+      }
+    }
+
+    setUiRunning(false);
+    if (!silent) {
+      statusText.textContent = 'Sesión detenida. Puedes volver a iniciar la cámara cuando quieras.';
+    }
   }
 
   function takeSnapshot() {
-    const img = document.getElementById('video-stream');
-    const canvas = document.createElement('canvas');
-    canvas.width  = img.naturalWidth  || img.width;
-    canvas.height = img.naturalHeight || img.height;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+    if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+      return;
+    }
+
+    captureCanvas.width = cameraVideo.videoWidth;
+    captureCanvas.height = cameraVideo.videoHeight;
+    const context = captureCanvas.getContext('2d');
+    context.drawImage(cameraVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
     const link = document.createElement('a');
-    link.download = `snapshot_${Date.now()}.jpg`;
-    link.href = canvas.toDataURL('image/jpeg');
+    link.download = `emotioncam_${Date.now()}.jpg`;
+    link.href = captureCanvas.toDataURL('image/jpeg', 0.92);
     link.click();
+  }
+
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    installPromptEvent = event;
+  });
+
+  ensureServiceWorker();
+
+  if (!isCameraAllowed()) {
+    setStatus('warn', 'HTTPS requerido');
+    setNetwork('warn', 'Cámara bloqueada');
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    statusText.textContent = 'Listo. Pulsa Iniciar cámara para comenzar.';
+  } else {
+    secureNotice.classList.remove('hidden');
+    secureNotice.innerHTML = '<strong>Este navegador no soporta cámara web.</strong> Prueba con Chrome o Edge actualizados en Android.';
+    startBtn.disabled = true;
+    setStatus('warn', 'Sin soporte');
+    setNetwork('warn', 'Sin cámara');
   }
 </script>
 </body>

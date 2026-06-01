@@ -36,15 +36,43 @@ class EmotionClassifier:
         self.model = tf.keras.models.load_model(model_path)
         with open(labels_path, 'r') as f:
             self.labels = json.load(f)
-        print(f"[EmotionClassifier] Modelo cargado ✓  Etiquetas: {self.labels}")
+
+        # Inspect model input shape to adapt preprocessing
+        try:
+            self.input_shape = self.model.input_shape  # (None, H, W, C) or similar
+            _, h, w, c = self.input_shape
+            self.target_size = (int(w), int(h))
+            self.channels = int(c) if c is not None else 1
+        except Exception:
+            # Fallback defaults
+            self.input_shape = None
+            self.target_size = (224, 224)
+            self.channels = 3
+
+        print(f"[EmotionClassifier] Modelo cargado OK  Etiquetas: {self.labels}  target={self.target_size} channels={self.channels}")
 
     def predict(self, face_img_rgb):
         import tensorflow as tf
         import cv2
-        img = cv2.resize(face_img_rgb, (224, 224))
-        img = img.astype('float32')
-        img = tf.keras.applications.mobilenet_v2.preprocess_input(img)
-        img = img.reshape(1, 224, 224, 3)
+        # Prepare image according to model input channels
+        target_w, target_h = self.target_size
+        gray = cv2.cvtColor(face_img_rgb, cv2.COLOR_RGB2GRAY)
+
+        if self.channels == 1:
+            # Model truly expects grayscale input.
+            img = cv2.resize(gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            img = img.astype('float32')
+            img = tf.keras.applications.mobilenet_v2.preprocess_input(img)
+            img = img.reshape(1, target_h, target_w, 1)
+        else:
+            # Training used grayscale content, but MobileNet base expects 3 channels.
+            # Keep the image grayscale, then replicate to RGB so the model sees the same
+            # luminance-only content it was trained on.
+            img = cv2.resize(gray, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+            img = img.astype('float32')
+            img = tf.keras.applications.mobilenet_v2.preprocess_input(img)
+            img = img.reshape(1, target_h, target_w, 3)
         pred = self.model.predict(img, verbose=0)[0]
         idx = int(np.argmax(pred))
         emotion = self.labels[idx]
