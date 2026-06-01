@@ -9,10 +9,19 @@ from datetime import datetime
 
 class Database:
     def __init__(self):
-        from kivy.utils import platform
+        try:
+            from kivy.utils import platform
+        except Exception:
+            # Kivy not available (typical on PC/server). Assume non-Android.
+            platform = 'linux'
+
         if platform == 'android':
-            from android.storage import app_storage_path
-            db_dir = app_storage_path()
+            try:
+                from android.storage import app_storage_path
+                db_dir = app_storage_path()
+            except Exception:
+                # Fallback to local data folder if android.storage isn't available
+                db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
         else:
             db_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
         os.makedirs(db_dir, exist_ok=True)
@@ -87,3 +96,33 @@ class Database:
         ).fetchall()
         c.close()
         return {r['emotion']: r['cnt'] for r in rows}
+
+
+# --- Módulo: exposición de API simple y creación perezosa de la BD ---
+_db = None
+
+def _get_db():
+    global _db
+    if _db is None:
+        _db = Database()
+    return _db
+
+
+def start_session():
+    return _get_db().start_session()
+
+
+def end_session(sid, duration):
+    return _get_db().end_session(sid, duration)
+
+
+def save_detection(sid, emotion, confidence):
+    return _get_db().save_detection(sid, emotion, confidence)
+
+
+def get_all_sessions():
+    return _get_db().get_all_sessions()
+
+
+def get_emotion_stats():
+    return _get_db().get_emotion_stats()
