@@ -1,6 +1,5 @@
-
-```markdown
 # 📷 EmotionCam — Informe Técnico y Documentación de Proyecto
+
 **Asignatura:** Inteligencia Artificial Aplicada a Apps Móviles  
 **Proyecto Final del Semestre** **Autores:** Yeison Betancur · Sara Dallos  
 
@@ -9,7 +8,7 @@
 ## 🛠️ 1. Componente: Ingeniería de Software
 
 ### Arquitectura de Software y Modularidad
-El proyecto implementa una arquitectura desacoplada basada en el patrón de diseño sugerido en la rúbrica oficial, separando de manera estricta las vistas, el controlador de eventos y los servicios de Inteligencia Artificial. 
+El proyecto implementa una arquitectura desacoplada basada en el patrón de diseño sugerido en la rúbrica oficial, separando de manera estricta las vistas, el controlador de eventos y los servicios de Inteligencia Artificial.
 
 ```text
 [ Capa de Interfaz ]   <---> Cliente Web Móvil (HTML5, CSS3, JavaScript Asíncrono)
@@ -19,7 +18,6 @@ El proyecto implementa una arquitectura desacoplada basada en el patrón de dise
 [ Módulo Core IA ]     <---> Pipeline DeepFace (Detección ROI + Inferencia CNN)
          ↓
 [ Capa Persistencia ]  <---> Base de Datos Relacional Local (SQLite3)
-
 ```
 
 La lógica del servidor se modularizó mediante programación orientada a objetos y abstracción de servicios:
