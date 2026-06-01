@@ -11,7 +11,7 @@ import ipaddress
 import os
 import threading
 import numpy as np
-from collections import Counter, deque
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, jsonify, Response, request, send_file
 from flask_socketio import SocketIO
@@ -43,16 +43,15 @@ classifier = get_classifier()
 
 # ── Estado global de sesión ─────────────────────────────────
 session_state = {
-    'active':     False,
-    'session_id': None,
-    'start_time': None,
-    'prediction_window': deque(maxlen=6),
+    'active':             False,
+    'session_id':         None,
+    'start_time':         None,
+    'prediction_window':  deque(maxlen=8),
     'stable_emotion_key': 'neutral',
-    'last_emotion': '—',
-    'last_emoji':   '😐',
-    'last_conf':    0.0,
-    'last_save':    0.0,   # timestamp del último save a DB
-    'ema_scores': {},
+    'last_emotion':       '—',
+    'last_emoji':         '😐',
+    'last_conf':          0.0,
+    'last_save':          0.0,
 }
 
 cap = None  # cámara global
@@ -61,7 +60,6 @@ cap = None  # cámara global
 def _get_lan_ip():
     """Devuelve la IP local usada para salir a la red, evitando adaptadores virtuales."""
     import socket
-
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         probe.connect(('8.8.8.8', 80))
@@ -80,7 +78,6 @@ def _load_certificate(path):
 def _server_cert_matches_ip(cert_path, local_ip):
     if not os.path.exists(cert_path):
         return False
-
     try:
         cert = _load_certificate(cert_path)
         san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
@@ -126,7 +123,6 @@ def _ensure_https_assets(local_ip):
             )
             .sign(ca_key, hashes.SHA256())
         )
-
         with open(CA_KEY_PATH, 'wb') as handle:
             handle.write(
                 ca_key.private_bytes(
@@ -151,7 +147,6 @@ def _ensure_https_assets(local_ip):
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, 'EmotionCam Local Server'),
         x509.NameAttribute(NameOID.COMMON_NAME, 'EmotionCam Local Server'),
     ])
-
     server_cert = (
         x509.CertificateBuilder()
         .subject_name(server_name)
@@ -190,7 +185,6 @@ def _ensure_https_assets(local_ip):
         )
         .sign(ca_key, hashes.SHA256())
     )
-
     with open(SERVER_KEY_PATH, 'wb') as handle:
         handle.write(
             server_key.private_bytes(
@@ -209,7 +203,6 @@ def _start_ca_http_server():
     """Sirve la carpeta de certificados por HTTP para instalar la CA sin confiar todavía en HTTPS."""
     handler = partial(SimpleHTTPRequestHandler, directory=CERT_DIR)
     server = ThreadingHTTPServer(('0.0.0.0', 5001), handler)
-
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
@@ -224,65 +217,28 @@ def _reset_prediction_smoothing():
 
 
 def _update_smoothed_emotion(emotion_key, confidence, emoji):
-    # Append new prediction into window
+    """
+    Voting window simple: los últimos 8 frames votan ponderados por confianza.
+    Gana la emoción con mayor confianza acumulada. Sin umbrales artificiales.
+    """
     window = session_state['prediction_window']
     window.append((emotion_key, confidence, emoji))
 
-    # Initialize EMA table if not present
-    if 'ema_scores' not in session_state or not isinstance(session_state['ema_scores'], dict):
-        session_state['ema_scores'] = {}
+    # Sumar confianza por emoción en la ventana
+    scores = {}
+    for k, conf, _ej in window:
+        scores[k] = scores.get(k, 0.0) + float(conf)
 
-    # Ensure known labels exist (use classifier labels if available)
-    try:
-        known_labels = getattr(classifier, 'labels', None) or ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
-    except Exception:
-        known_labels = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
+    # Ganador = mayor score acumulado
+    winner_key = max(scores, key=lambda k: scores[k])
+    winner_items = [item for item in window if item[0] == winner_key]
+    avg_conf = sum(i[1] for i in winner_items) / len(winner_items)
+    winner_emoji = winner_items[-1][2]
 
-    for lb in known_labels:
-        session_state['ema_scores'].setdefault(lb, 0.0)
-
-    # Update EMA per observed class
-    alpha = 0.35  # lower responsiveness to avoid single-frame domination
-    for k, conf, _ in window:
-        # Cap per-frame contribution and apply slight dampening for known over-represented labels
-        adj_conf = min(float(conf), 0.60)
-        if k == 'sad':
-            adj_conf *= 0.80
-        prev = session_state['ema_scores'].get(k, 0.0)
-        session_state['ema_scores'][k] = alpha * adj_conf + (1 - alpha) * prev
-
-    # Slight decay for unseen classes to prevent stale domination
-    for lb in list(session_state['ema_scores'].keys()):
-        if not any(w[0] == lb for w in window):
-            session_state['ema_scores'][lb] *= 0.92
-
-    # Pick candidate by EMA score
-    items = sorted(session_state['ema_scores'].items(), key=lambda x: x[1], reverse=True)
-    if not items:
-        return session_state['last_emotion'], session_state['last_conf'], session_state['last_emoji']
-
-    candidate_key, candidate_score = items[0]
-    second_score = items[1][1] if len(items) > 1 else 0.0
-
-    # Accept switch if candidate clearly leads or reaches an absolute threshold
-    lead_factor = 1.12
-    absolute_min = 0.32
-    should_switch = (candidate_score > second_score * lead_factor and candidate_score >= absolute_min) or (candidate_key == session_state.get('stable_emotion_key'))
-
-    if should_switch:
-        # Compute last observed emoji/conf for reporting
-        candidate_items = [item for item in window if item[0] == candidate_key]
-        if candidate_items:
-            avg_conf = sum(item[1] for item in candidate_items) / len(candidate_items)
-            last_emoji = candidate_items[-1][2]
-        else:
-            avg_conf = candidate_score
-            last_emoji = EMOJIS.get(candidate_key, '❓')
-
-        session_state['stable_emotion_key'] = candidate_key
-        session_state['last_emotion'] = candidate_key.capitalize()
-        session_state['last_emoji'] = last_emoji
-        session_state['last_conf'] = float(avg_conf)
+    session_state['stable_emotion_key'] = winner_key
+    session_state['last_emotion'] = winner_key.capitalize()
+    session_state['last_emoji'] = winner_emoji
+    session_state['last_conf'] = float(avg_conf)
 
     return session_state['last_emotion'], session_state['last_conf'], session_state['last_emoji']
 
@@ -336,10 +292,10 @@ def _process_frame(frame_bgr):
         emotion_key = emotion.lower().strip()
         stable_emotion, stable_conf, stable_emoji = _update_smoothed_emotion(emotion_key, conf, emoji)
         detections.append({
-            'rect': rect,
+            'rect':    rect,
             'emotion': stable_emotion,
-            'emoji': stable_emoji,
-            'conf': stable_conf,
+            'emoji':   stable_emoji,
+            'conf':    stable_conf,
         })
 
     if detections:
@@ -351,8 +307,8 @@ def _process_frame(frame_bgr):
                 session_state['last_save'] = now
 
         session_state['last_emotion'] = top_detection['emotion']
-        session_state['last_emoji'] = top_detection['emoji']
-        session_state['last_conf'] = top_detection['conf']
+        session_state['last_emoji']   = top_detection['emoji']
+        session_state['last_conf']    = top_detection['conf']
 
     return frame_bgr, detections
 
@@ -373,7 +329,6 @@ def generate_frames():
         for rect in faces:
             face_rgb = detector.crop_face(frame, rect)
             emotion, conf, emoji = classifier.predict(face_rgb)
-
             _update_smoothed_emotion(emotion.lower(), conf, emoji)
 
             # Guardar en DB máximo una vez por segundo
@@ -388,7 +343,7 @@ def generate_frames():
         for i, (x, y, w, h) in enumerate(faces):
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 200, 100), 2)
             if i < len(labels):
-                cv2.rectangle(frame, (x, y-28), (x+len(labels[i])*11, y), (0,0,0), -1)
+                cv2.rectangle(frame, (x, y-28), (x+len(labels[i])*11, y), (0, 0, 0), -1)
                 cv2.putText(frame, labels[i], (x+3, y-8),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 220, 120), 2)
 
@@ -426,8 +381,8 @@ def stats():
     raw   = db.get_emotion_stats()
     total = sum(raw.values()) if raw else 1
     all_emotions = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
-    emojis = {'angry':'😠','disgust':'🤢','fear':'😨','happy':'😄',
-              'neutral':'😐','sad':'😢','surprise':'😮'}
+    emojis = {'angry': '😠', 'disgust': '🤢', 'fear': '😨', 'happy': '😄',
+              'neutral': '😐', 'sad': '😢', 'surprise': '😮'}
     data = []
     for e in all_emotions:
         cnt = raw.get(e, 0)
@@ -483,16 +438,17 @@ def api_status():
 
 @app.route('/api/debug')
 def api_debug():
-    # Return recent prediction window and EMA scores for diagnosis
     window = list(session_state.get('prediction_window', []))
-    ema = session_state.get('ema_scores', {})
-    return jsonify(ok=True, window=[{'k':w[0],'conf':w[1],'emoji':w[2]} for w in window], ema=ema)
+    return jsonify(
+        ok=True,
+        window=[{'k': w[0], 'conf': w[1], 'emoji': w[2]} for w in window],
+        stable=session_state['stable_emotion_key'],
+    )
 
 
 @app.route('/api/reset-smoothing', methods=['POST'])
 def api_reset_smoothing():
     _reset_prediction_smoothing()
-    session_state['ema_scores'] = {}
     return jsonify(ok=True)
 
 
@@ -505,7 +461,13 @@ def api_frame():
 
     _, detections = _process_frame(frame)
     if not detections:
-        return jsonify(ok=True, emotion=session_state['last_emotion'], emoji=session_state['last_emoji'], conf=round(session_state['last_conf'] * 100), faces=0)
+        return jsonify(
+            ok=True,
+            emotion=session_state['last_emotion'],
+            emoji=session_state['last_emoji'],
+            conf=round(session_state['last_conf'] * 100),
+            faces=0,
+        )
 
     return jsonify(
         ok=True,
@@ -534,10 +496,10 @@ if __name__ == '__main__':
     ca_server = _start_ca_http_server()
     print(f"\n{'='*50}")
     print(f"  EmotionCam corriendo en:")
-    print(f"  PC:      https://localhost:5000")
+    print(f"  PC:       https://localhost:5000")
     print(f"  Teléfono: https://{local_ip}:5000")
     print(f"  (ambos deben estar en el mismo WiFi)")
-    print(f"  CA HTTP: http://{local_ip}:5001/emotioncam-ca.crt")
+    print(f"  CA HTTP:  http://{local_ip}:5001/emotioncam-ca.crt")
     print(f"  CA HTTPS: https://{local_ip}:5000/download-ca")
     print(f"{'='*50}\n")
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, ssl_context=(cert_path, key_path))
